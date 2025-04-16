@@ -3,19 +3,21 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from logger import setup_logger
 import requests
-
+import downloader, screenshot
 logger = setup_logger("crawler")
 
 
 class WebsiteCrawler:
-    def __init__(self, session, base_url, output_dir):
+    def __init__(self, session, base_url, output_dir, max_pages=None):
         self.session = session
         self.base_url = base_url
         self.output_dir = output_dir
         self.visited = set()
         self.queue = []
         self.base_domain = urlparse(base_url).netloc
-        self.crawl_delay = 1
+        self.crawl_delay = 2
+        self.max_pages = max_pages
+        self.processed_count = 0
 
     def _create_directory_structure(self, url):
         parsed = urlparse(url)
@@ -52,7 +54,7 @@ class WebsiteCrawler:
             html_pbar.update(1)
 
             # Take screenshot
-            take_screenshot(url, save_path)
+            screenshot.take_screenshot(url, save_path)
             screenshot_pbar.update(1)
 
             # Process downloads
@@ -71,10 +73,14 @@ class WebsiteCrawler:
             url = tag.get('href') or tag.get('src')
             if url and any(url.endswith(ext) for ext in ['.mp4', '.pptx', '.xlsx', '.pdf']):
                 full_url = urljoin(base_url, url)
-                download_file(self.session, full_url, os.path.join(save_path, 'downloads'), file_pbar)
+                downloader.download_file(self.session, full_url, os.path.join(save_path, 'downloads'), file_pbar)
 
     def crawl(self, html_pbar, screenshot_pbar, file_pbar):
         self.queue.append(self.base_url)
-        while self.queue:
+        while self.queue and (self.max_pages is None or self.processed_count < self.max_pages):
             current_url = self.queue.pop(0)
             self._process_page(current_url, html_pbar, screenshot_pbar, file_pbar)
+            self.processed_count += 1  # Increment counter
+            if self.max_pages and self.processed_count >= self.max_pages:
+                logger.info(f"Reached max pages limit ({self.max_pages}). Stopping crawl.")
+                break
