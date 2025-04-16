@@ -15,6 +15,7 @@ class WebsiteCrawler:
         self.visited = set()
         self.queue = []
         self.base_domain = urlparse(base_url).netloc
+        self.crawl_delay = 1
 
     def _create_directory_structure(self, url):
         parsed = urlparse(url)
