@@ -13,9 +13,35 @@ from logger import setup_logger
 logger = setup_logger("crawler")
 
 
+def convert_cookies_for_pyppeteer(session_cookies):
+    """Convert requests session cookies to Pyppeteer format."""
+    cookies = []
+    for cookie in session_cookies:
+        cookie_dict = {
+            'name': cookie.name,
+            'value': cookie.value,
+            'domain': cookie.domain,
+            'path': cookie.path,
+            'expires': cookie.expires,
+            'httpOnly': cookie.has_nonstandard_attr('httpOnly'),
+            'secure': cookie.secure
+        }
+        cookies.append(cookie_dict)
+    logger.debug(f"Converted {len(cookies)} cookies for Pyppeteer")
+    return cookies
+
+
 class WebsiteCrawler:
     def __init__(self, session, base_url, output_dir, max_pages=None):
+        """
+        Initialize the website crawler.
 
+        Args:
+            session: Authenticated requests session
+            base_url: Starting URL for crawling
+            output_dir: Directory to save backed up files
+            max_pages: Maximum number of pages to crawl (None for unlimited)
+        """
         self.session = session
         self.base_url = base_url
         self.output_dir = output_dir
@@ -24,7 +50,6 @@ class WebsiteCrawler:
         self.base_domain = urlparse(base_url).netloc
         self.max_pages = max_pages
         self.processed_count = 0
-        self.crawl_delay = 2
 
         # Create output directory if it doesn't exist
         os.makedirs(self.output_dir, exist_ok=True)
@@ -148,17 +173,19 @@ class WebsiteCrawler:
             # Parse HTML
             soup = BeautifulSoup(response.text, 'html.parser')
 
-            # Take screenshot - this calls the async function from screenshot.py
+            # Convert session cookies for Pyppeteer
+            pyppeteer_cookies = convert_cookies_for_pyppeteer(self.session.cookies)
+
+            # Take screenshot with authenticated cookies
             try:
-                screenshot_path = os.path.join(save_path, 'screenshot.png')
-                take_screenshot(url, save_path)
+                take_screenshot(url, save_path, pyppeteer_cookies)
                 screenshot_pbar.update(1)
                 logger.debug(f"Saved screenshot for {url}")
             except Exception as e:
                 logger.error(f"Failed to take screenshot of {url}: {str(e)}")
 
             # Download assets
-            self._download_assets(soup, url, save_path, file_pbar)
+            # self._download_assets(soup, url, save_path, file_pbar)
 
             # Extract links for crawling
             new_links = self._extract_links(soup, url)
