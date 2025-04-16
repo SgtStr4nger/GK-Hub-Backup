@@ -3,7 +3,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 from logger import setup_logger
-from screenshot import take_screenshot
+from screenshot import take_selenium_screenshot
 
 logger = setup_logger("crawler")
 
@@ -19,14 +19,12 @@ def convert_cookies_for_pyppeteer(session_cookies):
             'path': cookie.path,
             'secure': cookie.secure
         }
-
-        # Properly handle expires field - omit it to avoid format errors
-        # This fixes the "double value expected" error
-
+        # Omit expires field to avoid format errors
         cookies.append(cookie_dict)
 
     logger.debug(f"Converted {len(cookies)} cookies for Pyppeteer")
     return cookies
+
 
 class ScreenshotCrawler:
     def __init__(self, session, base_url, output_dir, max_pages=5):
@@ -44,19 +42,30 @@ class ScreenshotCrawler:
         logger.info(f"Will save screenshots to {output_dir}")
         logger.info(f"Maximum pages to crawl: {max_pages}")
 
-    def _create_screenshot_directory(self, url):
-        """Create directory for screenshot based on URL"""
+    def _create_directory_structure(self, url):
+        """Create directory structure mirroring the website URL structure"""
+        # Parse the URL to get the path component
         parsed = urlparse(url)
-        path = parsed.path.lstrip('/')
+        path_parts = parsed.path.strip('/').split('/')
 
-        # If path is empty, use 'index' for the homepage
-        if not path:
-            path = 'index'
+        # If there's no path, use 'index' for the homepage
+        if not path_parts or path_parts[0] == '':
+            path_parts = ['index']
 
-        # Create a simple path with page number prefix for easy sorting
-        save_path = os.path.join(self.output_dir, f"{self.processed_count + 1:02d}_{path}")
-        os.makedirs(save_path, exist_ok=True)
-        return save_path
+        # Create the full path, including domain as the root folder
+        full_path = os.path.join(self.output_dir, parsed.netloc, *path_parts)
+
+        # Handle query parameters by appending them as a subfolder
+        if parsed.query:
+            # Replace special characters that are invalid in filenames
+            query_folder = parsed.query.replace('=', '_').replace('&', '_')
+            full_path = os.path.join(full_path, f"query_{query_folder}")
+
+        # Create the directory recursively
+        os.makedirs(full_path, exist_ok=True)
+
+        logger.debug(f"Created directory structure: {full_path}")
+        return full_path
 
     def _extract_links(self, soup, current_url):
         """Extract all links from the page that belong to the same domain"""
@@ -89,17 +98,21 @@ class ScreenshotCrawler:
             response = self.session.get(url)
             response.raise_for_status()
 
-            # Create directory for this page
-            save_path = self._create_screenshot_directory(url)
+            # Create directory structure based on URL path
+            save_path = self._create_directory_structure(url)
 
             # Parse HTML to extract links
             soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Save HTML content
+            with open(os.path.join(save_path, 'page.html'), 'w', encoding='utf-8') as f:
+                f.write(response.text)
 
             # Convert session cookies for Pyppeteer
             pyppeteer_cookies = convert_cookies_for_pyppeteer(self.session.cookies)
 
             # Take screenshot with authenticated cookies
-            take_screenshot(url, save_path, pyppeteer_cookies)
+            take_selenium_screenshot(url, save_path, self.session.cookies)
             screenshot_pbar.update(1)
 
             # Extract links for crawling
@@ -111,6 +124,8 @@ class ScreenshotCrawler:
 
         except Exception as e:
             logger.error(f"Failed to process {url}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def crawl(self):
         """Start crawling from the base URL"""
