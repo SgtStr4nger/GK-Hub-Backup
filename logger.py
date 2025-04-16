@@ -1,7 +1,6 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from tqdm import tqdm
-import sys
 
 class TqdmHandler(logging.StreamHandler):
     def emit(self, record):
@@ -10,19 +9,19 @@ class TqdmHandler(logging.StreamHandler):
 
 def setup_logger(name):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
-    # File handler (rotating logs)
+    # File handler
     file_handler = RotatingFileHandler(
-        'website_backup.log',
-        maxBytes=10*1024*1024,
-        backupCount=5,
+        'screenshot_crawler.log',
+        maxBytes=5*1024*1024,
+        backupCount=3,
         encoding='utf-8'
     )
     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(file_formatter)
 
-    # TQDM-friendly console handler
+    # Console handler
     console_handler = TqdmHandler()
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter('%(levelname)s - %(message)s')
