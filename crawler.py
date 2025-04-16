@@ -17,23 +17,16 @@ def convert_cookies_for_pyppeteer(session_cookies):
             'value': cookie.value,
             'domain': cookie.domain,
             'path': cookie.path,
-            'httpOnly': cookie.has_nonstandard_attr('httpOnly'),
             'secure': cookie.secure
         }
 
-        # Fix expires format - ensure it's a number if present
-        if hasattr(cookie, 'expires') and cookie.expires:
-            try:
-                # Convert to float/double if it's not None
-                cookie_dict['expires'] = float(cookie.expires)
-            except (ValueError, TypeError):
-                # If conversion fails, omit the expires field
-                pass
+        # Properly handle expires field - omit it to avoid format errors
+        # This fixes the "double value expected" error
 
         cookies.append(cookie_dict)
 
+    logger.debug(f"Converted {len(cookies)} cookies for Pyppeteer")
     return cookies
-
 
 class ScreenshotCrawler:
     def __init__(self, session, base_url, output_dir, max_pages=5):
